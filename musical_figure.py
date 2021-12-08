@@ -97,6 +97,12 @@ def construct_colorspace(key_fs, frequencies) -> (np.ndarray, np.ndarray):
     return colors
 
 class Musician:
+    '''
+    An object that plays back the music_file, and during playback can 
+    supply information about the music, such as the intantenous periodogram,
+    the current 'key frequencenies', i.e. those frequencies/notes with the
+    highest power spectral density.
+    '''
     def __init__(self, music_file):
         
         #Get our music
@@ -122,9 +128,13 @@ class Musician:
             play(self.seg)
             self.start_time = time()
     
-    def get_song_time(self,time):
+    def get_song_time(self,t):
+        '''
+        Get time elapsed since the song began (0 if not playing).
+        t should be the result of a call to time.time()
+        '''
         if self.start_time is not None:
-            playtime = time - self.start_time
+            playtime = t - self.start_time
             if playtime > self.duration and self.playing:
                 self.start_playback()
             return playtime
@@ -157,40 +167,26 @@ class Musician:
 
 class MusicalFigure:
     def __init__(self,file):
-        
-        # #Get our music
-        # self.seg = pydub.AudioSegment.from_file("C:/users/vivia/Desktop/amazinggrace.mp3")
-        
-        # #Draw samples from it and generate a tukey-filter spectrogram
-        # samples, freq = pydub_to_np(self.seg)
-        # f, t, Sxx = spectrogram(samples.mean(axis=-1), freq, mode="magnitude",
-        #                         nperseg = self.seg.frame_rate//SPECTROGRAMS_PER_SEC,
-        #                         noverlap=0)
-        
-        # #Eliminate frequencies above a certain cutoff
-        # top_freq = np.searchsorted(f,TOP_FREQ) + 1
-        # self.f, self.t, self.Sxx = f[:top_freq], t, Sxx[:top_freq,:]
         self.musician = Musician(file)
         
         #Set up the plot.
-
         self.fig,(detailed_ax,display_ax) = plt.subplots(nrows=2)
         self.fig.set_facecolor('black')
         detailed_ax.set_facecolor('black')
         
+        #We need to know how tall to make our plot, so we need the max
+        #spectral power density
         max_extent = self.musician.Sxx.max()
         detailed_ax.set_ylim(0, max_extent)
         
         self.detailed_ax = detailed_ax
         
-        #This artist will draw the periodogram 
+        #This artist will draw the periodogram each frame in blue
         f,Sxx = self.musician.get_periodogram()
         self.frequency_artist, = detailed_ax.plot(f, Sxx)
         
-        #Locate spectrogram peaks and draw them in the correct color for their
-        #frequency, mapping all of the same notes to the same frequencies
-        #modularly
-        # peaks, peak_attributes = find_peaks(Sxx[:,0],distance = 5, height = 0.01)
+        #Locate spectrogram peaks and draw dotted vertical lines, colored
+        #based on which note they represent
         
         f, peaks = self.musician.get_key_frequencies()
         self.peak_artist = detailed_ax.vlines(f[peaks],0,max_extent,
@@ -198,20 +194,25 @@ class MusicalFigure:
                           linestyle="--")
         
         
-        #Start building our display_ax
+        #Start building our second, bottom axis. This will display an image
+        #where the x-axis represents frequency, but frequencies are colored
+        #based on nearby key (i.e. peak spectral density) frequencies/tones
         display_ax.set_facecolor('black')
-        # display_freqs, colorspace = construct_colorspace([])
         self.frequencies_for_image = np.linspace(0,TOP_FREQ,300)
         colorspace = self.musician.get_colors_for_frequencies(self.frequencies_for_image)
         self.display_artist = display_ax.imshow(colorspace.reshape(1,-1,3), aspect='auto')
         
         #Define our animation, which just calls MusicalFigure.update
-        #Every 1/SPECTROGRAMS_PER_SEC seconds
+        #               every 1/SPECTROGRAMS_PER_SEC seconds
         self.ani = FuncAnimation(self.fig,self.update,
                                  interval=1000/SPECTROGRAMS_PER_SEC-15)
         self.fig.canvas.mpl_connect('close_event', self.on_close)
             
     def update(self,frame):
+        '''
+        Update all artists by making calls to the underlying musician object.
+        Called repeatedly to animate the figure.
+        '''
         if frame==0:
             self.musician.start_playback()
         t = time()
@@ -221,15 +222,22 @@ class MusicalFigure:
             f[peaks],0,self.musician.Sxx.max(), 
             color=[freq_to_color(i) for i in f[peaks]],
             linestyle = '--')
+        
+        
         colors = self.musician.get_colors_for_frequencies(self.frequencies_for_image,
                                                           t=t)
         self.display_artist.set_data(colors.reshape(1,-1,3))
         f, periodogram = self.musician.get_periodogram(t=t)
         self.frequency_artist.set_data(f, periodogram)
+    
+    #When the figure is closed, the music should stop
     def on_close(self,event):
         self.musician.stop_playback()
     
     def show(self):
+        '''
+        Display the animated figure.
+        '''
         self.fig.show()
 
         
@@ -237,5 +245,3 @@ class MusicalFigure:
 if __name__=="__main__":
     fig = MusicalFigure(file = "jinglebells.mp3")
     fig.show()
-    
-    
