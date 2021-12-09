@@ -15,6 +15,7 @@ from scipy.signal import spectrogram, find_peaks
 
 from time import time
 
+from helpers import memoized
 
 twlth_rt_2 = 2**(1/12)
 SPECTROGRAMS_PER_SEC = 10
@@ -75,6 +76,7 @@ def colorwheel(x: float, luminosity: float = 0.5) -> (float,float,float):
     return colorsys.hls_to_rgb(x%1,luminosity,1)
 
 
+@memoized
 def construct_colorspace(key_fs, frequencies) -> (np.ndarray, np.ndarray):
     colors = np.zeros((len(frequencies),3),dtype=float)
     averages = [(key_fs[i]+key_fs[i+1])/2 for i in range(len(key_fs)-1)]
@@ -114,7 +116,9 @@ class Musician:
         f, t, Sxx = spectrogram(samples.mean(axis=-1), freq, mode="magnitude",
                                 nperseg = self.seg.frame_rate//SPECTROGRAMS_PER_SEC,
                                 noverlap=0)
-        self.find_peaks = find_peaks
+        self.find_peaks = memoized(lambda pgram: find_peaks(pgram, 
+                                                            distance = 5, 
+                                                            height = 0.007))
         
         #Eliminate frequencies above a certain cutoff
         top_freq = np.searchsorted(f,TOP_FREQ) + 1
@@ -143,13 +147,14 @@ class Musician:
         
     def get_key_frequencies(self,t = time()):
         f, periodogram = self.get_periodogram(t)
-        peaks, peak_attributes = self.find_peaks(periodogram,
-                                            distance = 5, height = 0.007)
+        periodogram = tuple(periodogram) #numpy arrays aren't hashable
+        peaks, peak_attributes = self.find_peaks(periodogram)
         return f, peaks
     
     def get_colors_for_frequencies(self,frequencies,t=time()):
+        frequencies = tuple(frequencies)
         f, key_fs = self.get_key_frequencies(t)
-        colorspace = construct_colorspace(f[key_fs], frequencies)
+        colorspace = construct_colorspace(tuple(f[key_fs]), frequencies)
         return colorspace
     
     def get_periodogram(self,t = time()):
@@ -162,11 +167,13 @@ class Musician:
         self.playing = False
     
     def precompute_all_colorspaces(self, frequencies):
+        frequencies = tuple(frequencies)
         for time_idx, t in enumerate(self.t):
             periodogram = self.Sxx[:,time_idx]
-            peaks, peak_attributes = self.find_peaks(periodogram,
-                                    distance = 5, height = 0.007)
-            construct_colorspace(self.f[peaks], frequencies)
+            periodogram = tuple(periodogram)
+            print(periodogram)
+            peaks, peak_attributes = self.find_peaks(periodogram)
+            construct_colorspace(tuple(self.f[peaks]), frequencies)
                     
         
     def __del__(self):
