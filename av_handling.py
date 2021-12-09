@@ -18,6 +18,14 @@ from scipy.signal import spectrogram, find_peaks
 from time import time
 
 
+def memoize(f):
+    memo = {}
+    def helper(x):
+        if x not in memo:            
+            memo[x] = f(x)
+        return memo[x]
+    return helper
+
 twlth_rt_2 = 2**(1/12)
 SPECTROGRAMS_PER_SEC = 10
 TOP_FREQ = 1500
@@ -77,6 +85,7 @@ def colorwheel(x: float, luminosity: float = 0.5) -> (float,float,float):
     return colorsys.hls_to_rgb(x%1,luminosity,1)
 
 
+@memoize
 def construct_colorspace(key_fs, frequencies) -> (np.ndarray, np.ndarray):
     colors = np.zeros((len(frequencies),3),dtype=float)
     averages = [(key_fs[i]+key_fs[i+1])/2 for i in range(len(key_fs)-1)]
@@ -116,7 +125,7 @@ class Musician:
         f, t, Sxx = spectrogram(samples.mean(axis=-1), freq, mode="magnitude",
                                 nperseg = self.seg.frame_rate//SPECTROGRAMS_PER_SEC,
                                 noverlap=0)
-        self.find_peaks = find_peaks
+        self.find_peaks = memoize(find_peaks)
         
         #Eliminate frequencies above a certain cutoff
         top_freq = np.searchsorted(f,TOP_FREQ) + 1
