@@ -6,8 +6,6 @@ Created on Wed Dec  8 17:58:29 2021
 """
 
 import colorsys
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import numpy as np
 
 import pydub
